@@ -4,10 +4,22 @@ from dragon.adapters.null import NullAdapter
 _REGISTRY: dict[str, type[GuardrailAdapter]] = {
     "null": NullAdapter,
 }
+_plugins_loaded = False
+
+
+def _load_plugins() -> None:
+    global _plugins_loaded
+    if _plugins_loaded:
+        return
+    _plugins_loaded = True
+    from importlib.metadata import entry_points
+    for ep in entry_points(group="dragon.adapters"):
+        cls = ep.load()
+        register(ep.name, cls)
 
 
 def get_adapter(name: str) -> GuardrailAdapter:
-    """Resolve an adapter by name. Used by task files so Inspect CLI can pass --task-arg adapter=<name>."""
+    _load_plugins()
     cls = _REGISTRY.get(name)
     if cls is None:
         available = ", ".join(_REGISTRY)

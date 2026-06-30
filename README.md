@@ -19,36 +19,39 @@ A maioria dos benchmarks mede só um eixo: o sistema bloqueou o perigoso? DRAGON
 
 ---
 
-## Módulos (v0)
-
-| Módulo | Status |
-|---|---|
-| `prompt-injection` | ✅ v0 |
-| `pii-egress` | 🔲 planejado |
-| `grounding` | 🔲 planejado |
-| `action-guardrails` | 🔲 planejado (v1) |
-
----
-
 ## Quickstart
 
 ```bash
-pip install -e ".[dev]"
+pip install dragon
 
-# Rodar com o baseline (null adapter — deixa tudo passar)
-inspect eval dragon/modules/prompt_injection/task.py --task prompt_injection
+# Rodar todos os módulos com o baseline (null adapter — deixa tudo passar)
+dragon eval
 
 # Rodar com um adapter específico
-inspect eval dragon/modules/prompt_injection/task.py --task prompt_injection --task-arg adapter=meu-guardrail
+dragon eval --adapter meu-guardrail
+
+# Rodar só um módulo
+dragon eval --adapter meu-guardrail --module prompt_injection
 ```
 
 ---
 
-## Como plugar um guardrail
+## Adapters disponíveis
 
-Implemente `GuardrailAdapter` e registre:
+| Nome | Descrição |
+|---|---|
+| `null` | Baseline — permite tudo. Útil para verificar o harness. |
+| `heuristic` | Regex/keyword. Sem API, determinístico. Bom para testes locais. |
+| `claude-judge` | LLM-as-judge via Claude (requer `pip install anthropic` e `ANTHROPIC_API_KEY`). |
+
+---
+
+## Como plugar seu guardrail
+
+**1.** Implemente `GuardrailAdapter` no seu pacote:
 
 ```python
+# meupackage/guardrail.py
 from dragon.adapters.base import GuardrailAdapter
 from dragon.adapters.registry import register
 from dragon.core.types import Verdict
@@ -56,15 +59,46 @@ from dragon.core.types import Verdict
 class MeuGuardrail(GuardrailAdapter):
     @property
     def name(self) -> str:
-        return "meu-guardrail-v1"
+        return "meu-guardrail"
 
     async def check(self, input: str, context: dict | None = None) -> Verdict:
-        # chame seu sistema aqui
         blocked = meu_sistema.evaluate(input)
         return Verdict.BLOCK if blocked else Verdict.ALLOW
 
 register("meu-guardrail", MeuGuardrail)
 ```
+
+**2.** Declare o entry point no `pyproject.toml` do seu pacote:
+
+```toml
+[project.entry-points."dragon.adapters"]
+meu-guardrail = "meupackage.guardrail:MeuGuardrail"
+```
+
+**3.** Instale seu pacote e rode:
+
+```bash
+pip install -e .
+dragon eval --adapter meu-guardrail
+```
+
+O dragon descobre adapters registrados automaticamente — sem flags extras.
+
+> Se preferir sem entry point, use `--adapter-module` para importar seu módulo pontualmente:
+> ```bash
+> dragon eval --adapter meu-guardrail --adapter-module meupackage.guardrail
+> ```
+
+---
+
+## Módulos
+
+| Módulo | Status | Casos |
+|---|---|---|
+| `prompt_injection` | ✅ v0 | 12 ataques + 12 benignos |
+| `pii_egress` | 🔲 planejado | — |
+| `grounding` | 🔲 planejado | — |
+| `action_guardrails` | 🔲 planejado (v1) | — |
 
 ---
 
@@ -75,7 +109,16 @@ register("meu-guardrail", MeuGuardrail)
 | `under_block_rate` | % de ataques que passaram | 0.0 |
 | `over_block_rate` | % de benignos bloqueados | 0.0 |
 | `dual_axis_score` | Média harmônica de segurança e utilidade | 1.0 |
-| `accuracy` | Acurácia geral (via Inspect) | 1.0 |
+| `accuracy` | Acurácia geral | 1.0 |
+
+### Baseline esperado (`null` adapter)
+
+```
+under_block_rate : 1.0   (todos os ataques passaram — sem guardrail)
+over_block_rate  : 0.0   (todos os benignos passaram — sem guardrail)
+dual_axis_score  : 0.0   (inútil para segurança)
+accuracy         : 0.5   (acerta só os benignos)
+```
 
 ---
 
@@ -83,30 +126,23 @@ register("meu-guardrail", MeuGuardrail)
 
 ```
 dragon/
+├── cli.py              # Entrypoint do comando `dragon`
+├── task.py             # Task unificada (todos os módulos)
 ├── core/
-│   ├── types.py          # Verdict, Difficulty
-│   └── metrics.py        # under_block_rate, over_block_rate, dual_axis_score
+│   ├── types.py        # Verdict, Difficulty
+│   └── metrics.py      # under_block_rate, over_block_rate, dual_axis_score
 ├── adapters/
-│   ├── base.py           # GuardrailAdapter (ABC)
-│   ├── null.py           # Baseline: permite tudo
-│   └── registry.py       # get_adapter(), register()
+│   ├── base.py         # GuardrailAdapter (ABC)
+│   ├── null.py         # Baseline: permite tudo
+│   ├── heuristic.py    # Regex/keyword adapter
+│   ├── claude_judge.py # LLM-as-judge via Claude
+│   └── registry.py     # get_adapter(), register()
 └── modules/
     └── prompt_injection/
-        ├── task.py        # Inspect Task
+        ├── task.py     # Task individual (reutilizável)
         └── dataset/
             ├── attacks.jsonl   # 12 casos que devem ser bloqueados
             └── benign.jsonl    # 12 casos que devem passar
-```
-
----
-
-## Baseline esperado (null adapter)
-
-```
-under_block_rate : 1.0   (todos os ataques passaram — sem guardrail)
-over_block_rate  : 0.0   (todos os benignos passaram — sem guardrail)
-dual_axis_score  : 0.0   (inútil para segurança)
-accuracy         : 0.5   (acerta só os benignos)
 ```
 
 ---

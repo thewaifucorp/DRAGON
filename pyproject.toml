@@ -11,6 +11,9 @@ dependencies = [
     "inspect-ai>=0.3",
 ]
 
+[project.scripts]
+dragon = "dragon.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
