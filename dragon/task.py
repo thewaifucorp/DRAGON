@@ -14,10 +14,18 @@ def _register_modules() -> None:
     from dragon.modules.pii_egress.task import load_dataset as _pii
     from dragon.modules.grounding.task import load_dataset as _gr
     from dragon.modules.action_guardrails.task import load_dataset as _ag
+    from dragon.modules.jailbreak.task import load_dataset as _jb
+    from dragon.modules.toxicity.task import load_dataset as _tox
+    from dragon.modules.ideological_censorship.task import load_dataset as _ic
+    from dragon.modules.cross_lingual_bypass.task import load_dataset as _clb
     _MODULES["prompt_injection"] = _pi
     _MODULES["pii_egress"] = _pii
     _MODULES["grounding"] = _gr
     _MODULES["action_guardrails"] = _ag
+    _MODULES["jailbreak"] = _jb
+    _MODULES["toxicity"] = _tox
+    _MODULES["ideological_censorship"] = _ic
+    _MODULES["cross_lingual_bypass"] = _clb
 
 
 def _load_datasets(module: str | None) -> list[Sample]:
