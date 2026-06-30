@@ -1,46 +1,38 @@
+from pathlib import Path
+
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample
+from inspect_ai.dataset import FieldSpec, Sample, json_dataset
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from dragon.adapters import get_adapter
 from dragon.core.metrics import dual_axis_score, over_block_rate, under_block_rate
 
-_MODULES: dict[str, callable] = {}
+_DATASET_DIR = Path(__file__).parent / "dataset"
 
 
-def _register_modules() -> None:
-    from dragon.modules.prompt_injection.task import load_dataset as _pi
-    from dragon.modules.pii_egress.task import load_dataset as _pii
-    from dragon.modules.grounding.task import load_dataset as _gr
-    from dragon.modules.action_guardrails.task import load_dataset as _ag
-    _MODULES["prompt_injection"] = _pi
-    _MODULES["pii_egress"] = _pii
-    _MODULES["grounding"] = _gr
-    _MODULES["action_guardrails"] = _ag
-
-
-def _load_datasets(module: str | None) -> list[Sample]:
-    _register_modules()
-    if module is not None:
-        if module not in _MODULES:
-            available = ", ".join(_MODULES)
-            raise ValueError(f"Unknown module '{module}'. Available: {available}")
-        return _MODULES[module]()
-    samples = []
-    for loader in _MODULES.values():
-        samples.extend(loader())
-    return samples
+def load_dataset() -> list[Sample]:
+    field_spec = FieldSpec(
+        input="input",
+        target="expected_verdict",
+        id="id",
+        metadata=["tool_name", "tool_args", "scope", "category", "difficulty", "lang", "provenance"],
+    )
+    attacks = json_dataset(str(_DATASET_DIR / "attacks.jsonl"), field_spec)
+    benign = json_dataset(str(_DATASET_DIR / "benign.jsonl"), field_spec)
+    return list(attacks) + list(benign)
 
 
 @solver
 def _guardrail_solver(adapter_name: str) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         adapter = get_adapter(adapter_name)
-        verdict = await adapter.check(
-            state.input_text,
-            state.metadata.get("context"),
-        )
+        context = {
+            k: state.metadata[k]
+            for k in ("tool_name", "tool_args", "scope")
+            if state.metadata.get(k) is not None
+        }
+        verdict = await adapter.check(state.input_text, context or None)
         state.metadata["guardrail_verdict"] = verdict.value
         return state
     return solve
@@ -67,15 +59,20 @@ def verdict_scorer() -> Scorer:
 
 
 @task
-def dragon(adapter: str = "null", module: str | None = None) -> Task:
-    """Run the DRAGON benchmark against a guardrail adapter.
+def action_guardrails(adapter: str = "null") -> Task:
+    """Benchmark action-layer guardrails on the dual axis (under-block × over-block).
+
+    Evaluates whether the guardrail prevents an agent from executing dangerous
+    tool calls: destructive actions, tool abuse, and over-permission access.
+
+    The adapter receives the tool call as a readable string in `input` and
+    structured metadata in `context` ({tool_name, tool_args, scope}).
 
     Args:
-        adapter: Guardrail adapter to evaluate (default: 'null' baseline).
-        module:  Run only this module. Omit to run all modules.
+        adapter: Name of the guardrail adapter to evaluate (default: 'null' baseline).
     """
     return Task(
-        dataset=_load_datasets(module),
+        dataset=load_dataset(),
         solver=_guardrail_solver(adapter),
         scorer=verdict_scorer(),
     )

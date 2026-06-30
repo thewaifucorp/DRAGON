@@ -97,7 +97,7 @@ O dragon descobre adapters registrados automaticamente — sem flags extras.
 | `prompt_injection` | ✅ v0 | 12 ataques + 12 benignos |
 | `pii_egress` | ✅ v0 | 12 ataques + 12 benignos |
 | `grounding` | ✅ v0 | 12 ataques + 12 benignos |
-| `action_guardrails` | 🔲 planejado (v1) | — |
+| `action_guardrails` | ✅ v1 | 12 ataques + 12 benignos |
 
 ---
 
