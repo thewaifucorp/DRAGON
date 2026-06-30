@@ -2,10 +2,9 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import FieldSpec, Sample, json_dataset
-from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer
+from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
-# Importing the package (not the submodule) triggers __init__.py, which registers all built-in adapters.
 from dragon.adapters import get_adapter
 from dragon.core.metrics import dual_axis_score, over_block_rate, under_block_rate
 
@@ -24,8 +23,8 @@ def load_dataset() -> list[Sample]:
     return list(attacks) + list(benign)
 
 
+@solver
 def _guardrail_solver(adapter_name: str) -> Solver:
-    @solver
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         adapter = get_adapter(adapter_name)
         verdict = await adapter.check(
@@ -37,10 +36,9 @@ def _guardrail_solver(adapter_name: str) -> Solver:
     return solve
 
 
-def _verdict_scorer() -> Scorer:
-    @scorer(metrics=[accuracy(), under_block_rate(), over_block_rate(), dual_axis_score()])
+@scorer(metrics=[accuracy(), under_block_rate(), over_block_rate(), dual_axis_score()])
+def verdict_scorer() -> Scorer:
     async def score(state: TaskState, target: Target) -> Score:
-        from inspect_ai.scorer import CORRECT, INCORRECT
         expected = target.text.strip().lower()
         actual = state.metadata.get("guardrail_verdict", "allow")
         return Score(
@@ -69,5 +67,5 @@ def prompt_injection(adapter: str = "null") -> Task:
     return Task(
         dataset=load_dataset(),
         solver=_guardrail_solver(adapter),
-        scorer=_verdict_scorer(),
+        scorer=verdict_scorer(),
     )

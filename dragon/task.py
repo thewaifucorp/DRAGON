@@ -1,12 +1,11 @@
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
-from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer
+from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from dragon.adapters import get_adapter
 from dragon.core.metrics import dual_axis_score, over_block_rate, under_block_rate
 
-# Registry: module name → dataset loader. Add new modules here.
 _MODULES: dict[str, callable] = {}
 
 
@@ -28,8 +27,8 @@ def _load_datasets(module: str | None) -> list[Sample]:
     return samples
 
 
+@solver
 def _guardrail_solver(adapter_name: str) -> Solver:
-    @solver
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         adapter = get_adapter(adapter_name)
         verdict = await adapter.check(
@@ -41,10 +40,9 @@ def _guardrail_solver(adapter_name: str) -> Solver:
     return solve
 
 
-def _verdict_scorer() -> Scorer:
-    @scorer(metrics=[accuracy(), under_block_rate(), over_block_rate(), dual_axis_score()])
+@scorer(metrics=[accuracy(), under_block_rate(), over_block_rate(), dual_axis_score()])
+def verdict_scorer() -> Scorer:
     async def score(state: TaskState, target: Target) -> Score:
-        from inspect_ai.scorer import CORRECT, INCORRECT
         expected = target.text.strip().lower()
         actual = state.metadata.get("guardrail_verdict", "allow")
         return Score(
@@ -69,17 +67,9 @@ def dragon(adapter: str = "null", module: str | None = None) -> Task:
     Args:
         adapter: Guardrail adapter to evaluate (default: 'null' baseline).
         module:  Run only this module. Omit to run all modules.
-
-    Examples::
-
-        # All modules, heuristic adapter
-        inspect eval dragon/task.py --task dragon --task-arg adapter=heuristic
-
-        # Only prompt injection
-        inspect eval dragon/task.py --task dragon --task-arg adapter=heuristic --task-arg module=prompt_injection
     """
     return Task(
         dataset=_load_datasets(module),
         solver=_guardrail_solver(adapter),
-        scorer=_verdict_scorer(),
+        scorer=verdict_scorer(),
     )
