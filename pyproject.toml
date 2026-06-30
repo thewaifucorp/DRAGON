@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dragon"
-version = "0.1.0"
+version = "1.0.0"
 description = "DRAGON — Diagnostic Robustness of AI Guardrails On NLP"
 requires-python = ">=3.11"
 dependencies = [
