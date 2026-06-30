@@ -41,7 +41,6 @@ dragon eval --adapter meu-guardrail --module prompt_injection
 | Nome | Descrição |
 |---|---|
 | `null` | Baseline — permite tudo. Útil para verificar o harness. |
-| `heuristic` | Regex/keyword. Sem API, determinístico. Bom para testes locais. |
 | `claude-judge` | LLM-as-judge via Claude (requer `pip install anthropic` e `ANTHROPIC_API_KEY`). |
 
 ---
